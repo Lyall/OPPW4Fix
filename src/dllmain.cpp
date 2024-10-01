@@ -252,24 +252,28 @@ void Resolution()
 {
     if (bCustomRes) {
         // Add custom resolution
-        uint8_t* ResolutionListScanResult = Memory::PatternScan(baseModule, "00 05 00 00 D0 02 00 00 56 05 00 00");
+        uint8_t* ResolutionList1ScanResult = Memory::PatternScan(baseModule, "00 05 00 00 D0 02 00 00 56 05 00 00");
+        uint8_t* ResolutionList2ScanResult = Memory::PatternScan(baseModule, "00 05 D0 02 56 05 00 03 40 06");
         uint8_t* ResolutionIndexScanResult = Memory::PatternScan(baseModule, "44 89 ?? ?? ?? ?? ?? 89 ?? ?? 89 ?? ?? C7 ?? ?? 01 00 00 00");
-        if (ResolutionListScanResult && ResolutionIndexScanResult) {
-            spdlog::info("Custom Resolution: List: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionListScanResult - (uintptr_t)baseModule);
+        if (ResolutionList1ScanResult && ResolutionList2ScanResult && ResolutionIndexScanResult) {
+            spdlog::info("Custom Resolution: List 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionList1ScanResult - (uintptr_t)baseModule);
+            spdlog::info("Custom Resolution: List 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionList2ScanResult - (uintptr_t)baseModule);
 
             // Replace 1280x720 with new resolution
-            Memory::Write((uintptr_t)ResolutionListScanResult + 0x8, iCustomResX);
-            Memory::Write((uintptr_t)ResolutionListScanResult + 0xC, iCustomResY);
+            Memory::Write((uintptr_t)ResolutionList1ScanResult, iCustomResX);
+            Memory::Write((uintptr_t)ResolutionList1ScanResult + 0x4, iCustomResY);
+            Memory::Write((uintptr_t)ResolutionList2ScanResult, (short)iCustomResX);
+            Memory::Write((uintptr_t)ResolutionList2ScanResult + 0x2, (short)iCustomResY);
             spdlog::info("Custom Resolution: List: Replaced {}x{} with {}x{}", 1280, 720, iCustomResX, iCustomResY);
 
             spdlog::info("Custom Resolution: Index: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionIndexScanResult - (uintptr_t)baseModule);
             static SafetyHookMid ForceResMidHook{};
             ForceResMidHook = safetyhook::create_mid(ResolutionIndexScanResult,
                 [](SafetyHookContext& ctx) {
-                    ctx.r14 = 1;    // Force 1280x720 on any resolution change
+                    ctx.r14 = 0;    // Force 1280x720 on any resolution change
                 });
         }
-        else if (!ResolutionListScanResult || !ResolutionIndexScanResult) {
+        else if (!ResolutionList1ScanResult || !ResolutionList2ScanResult || !ResolutionIndexScanResult) {
             spdlog::error("Custom Resolution: Pattern scan(s) failed.");
         }
 
