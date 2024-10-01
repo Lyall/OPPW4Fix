@@ -32,7 +32,7 @@ int iCustomResY = 720;
 bool bFixFOV;
 bool bFixAspect;
 bool bFixHUD;
-float fFramerateCap;
+int iFramerateCap;
 float fGameplayFOVMulti;
 int iShadowResolution;
 
@@ -218,12 +218,12 @@ void Configuration()
     }
     spdlog::info("Config Parse: fGameplayFOVMulti: {}", fGameplayFOVMulti);
 
-    inipp::get_value(ini.sections["Framerate Cap"], "Framerate", fFramerateCap);
-    if ((float)fFramerateCap < 10.00f || (float)fFramerateCap > 500.00f) {
-        fFramerateCap = std::clamp((float)fFramerateCap, 10.00f, 500.00f);
-        spdlog::warn("Config Parse: fFramerateCap value invalid, clamped to {}", fFramerateCap);
+    inipp::get_value(ini.sections["Framerate Cap"], "Framerate", iFramerateCap);
+    if (iFramerateCap < 10 || iFramerateCap > 500) {
+        iFramerateCap = std::clamp(iFramerateCap, 10, 500);
+        spdlog::warn("Config Parse: iFramerateCap value invalid, clamped to {}", iFramerateCap);
     }
-    spdlog::info("Config Parse: fFramerateCap: {}", fFramerateCap);
+    spdlog::info("Config Parse: iFramerateCap: {}", iFramerateCap);
 
     inipp::get_value(ini.sections["Shadow Quality"], "Resolution", iShadowResolution);
     if (iShadowResolution < 64 || iShadowResolution > 16384) {
@@ -371,13 +371,82 @@ void HUD()
         else if (!KeyGuideScanResult) {
             spdlog::error("HUD: Key Guide: Pattern scan failed.");
         }
+
+        // Menu Selections
+        uint8_t* MenuSelectionsScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 83 ?? ?? 7C ?? F3 0F ?? ?? ?? ?? ?? ?? EB ??");
+        if (MenuSelectionsScanResult) {
+            spdlog::info("HUD: Menu Selections: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MenuSelectionsScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MenuSelectionsMidHook{};
+            MenuSelectionsMidHook = safetyhook::create_mid(MenuSelectionsScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm1.f32[0] = fHUDWidth;
+                });
+        }
+        else if (!MenuSelectionsScanResult) {
+            spdlog::error("HUD: Menu Selections: Pattern scan failed.");
+        }
+
+        // Minimap Icons
+        uint8_t* MinimapIconsScanResult = Memory::PatternScan(baseModule, "F3 41 ?? ?? ?? ?? F3 41 ?? ?? ?? ?? F3 44 ?? ?? ?? F3 44 ?? ?? ?? 0F ?? ?? ?? 0F 83 ?? ?? ?? ??");
+        if (MinimapIconsScanResult) {
+            spdlog::info("HUD:  Minimap Icons: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MinimapIconsScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MinimapIconsMidHook{};
+            MinimapIconsMidHook = safetyhook::create_mid(MinimapIconsScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect) {
+                        ctx.xmm1.f32[0] *= 1920.00f;
+                        ctx.xmm1.f32[0] /= 1080.00f * fAspectRatio;
+                    }
+                    else if (fAspectRatio < fNativeAspect) {
+                        ctx.xmm0.f32[0] *= 1080.00f;
+                        ctx.xmm0.f32[0] /= 1920.00f / fAspectRatio;
+                    }
+                });
+        }
+        else if (!MinimapIconsScanResult) {
+            spdlog::error("HUD: Minimap Icons: Pattern scan failed.");
+        }
+
+        // Gameplay HUD
+        uint8_t* GameplayHUDScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? 66 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ??");
+        if (GameplayHUDScanResult) {
+            spdlog::info("HUD:  Gameplay HUD: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayHUDScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid GameplayHUDWidthMidHook{};
+            GameplayHUDWidthMidHook = safetyhook::create_mid(GameplayHUDScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm1.f32[0] = fHUDWidth;
+                });
+
+            static SafetyHookMid GameplayHUDHeightMidHook{};
+            GameplayHUDHeightMidHook = safetyhook::create_mid(GameplayHUDScanResult + 0x1B,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDHeight;
+                });
+        }
+        else if (!GameplayHUDScanResult) {
+            spdlog::error("HUD: Gameplay HUD: Pattern scan failed.");
+        }
     }   
 }
 
 void Framerate()
 {
-    if (fFramerateCap != 60.00f) {
-        
+    if (iFramerateCap != 60) {
+        // Framerate Cap
+        uint8_t* FramerateCapScanResult = Memory::PatternScan(baseModule, "B8 3C 00 00 00 83 ?? 02 0F ?? ?? 8D ?? ?? 85 ?? 74 ?? 85 ??");
+        if (FramerateCapScanResult)
+        {
+            spdlog::info("Framerate Cap: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)FramerateCapScanResult - (uintptr_t)baseModule);
+            Memory::Write((uintptr_t)FramerateCapScanResult + 0x1, iFramerateCap);
+            spdlog::info("Framerate Cap: Patched instruction.");
+        }
+        else if (!FramerateCapScanResult)
+        {
+            spdlog::error("Framerate Cap: Pattern scan failed.");
+        }
     }
 }
 
