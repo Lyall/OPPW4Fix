@@ -250,12 +250,32 @@ void Configuration()
 
 void Resolution()
 {
+    uint8_t* CurrentResolutionScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 89 ?? ?? 48 ?? ?? ?? 89 ?? ?? 89 ?? ?? 48 ?? ?? ?? 74 ?? FF ?? ?? ?? ?? ??");
+    if (CurrentResolutionScanResult) {
+        spdlog::info("Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CurrentResolutionScanResult - (uintptr_t)baseModule);
+        static SafetyHookMid CurrentResolutionMidHook{};
+        CurrentResolutionMidHook = safetyhook::create_mid(CurrentResolutionScanResult,
+            [](SafetyHookContext& ctx) {
+                // Log resolution
+                int iResX = (int)ctx.rsi;
+                int iResY = (int)ctx.rdi;
+
+                if (iResX != iCurrentResX || iResY != iCurrentResY) {
+                    iCurrentResX = iResX;
+                    iCurrentResY = iResY;
+                    CalculateAspectRatio(true);
+                }
+            });
+    }
+    else if (!CurrentResolutionScanResult) {
+        spdlog::error("Current Resolution: Pattern scan failed.");
+    }
+
     if (bCustomRes) {
         // Add custom resolution
         uint8_t* ResolutionList1ScanResult = Memory::PatternScan(baseModule, "00 05 00 00 D0 02 00 00 56 05 00 00");
         uint8_t* ResolutionList2ScanResult = Memory::PatternScan(baseModule, "00 05 D0 02 56 05 00 03 40 06");
-        uint8_t* ResolutionIndexScanResult = Memory::PatternScan(baseModule, "44 89 ?? ?? ?? ?? ?? 89 ?? ?? 89 ?? ?? C7 ?? ?? 01 00 00 00");
-        if (ResolutionList1ScanResult && ResolutionList2ScanResult && ResolutionIndexScanResult) {
+        if (ResolutionList1ScanResult && ResolutionList2ScanResult) {
             spdlog::info("Custom Resolution: List 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionList1ScanResult - (uintptr_t)baseModule);
             spdlog::info("Custom Resolution: List 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionList2ScanResult - (uintptr_t)baseModule);
 
@@ -265,26 +285,20 @@ void Resolution()
             Memory::Write((uintptr_t)ResolutionList2ScanResult, (short)iCustomResX);
             Memory::Write((uintptr_t)ResolutionList2ScanResult + 0x2, (short)iCustomResY);
             spdlog::info("Custom Resolution: List: Replaced {}x{} with {}x{}", 1280, 720, iCustomResX, iCustomResY);
-
-            spdlog::info("Custom Resolution: Index: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionIndexScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid ForceResMidHook{};
-            ForceResMidHook = safetyhook::create_mid(ResolutionIndexScanResult,
-                [](SafetyHookContext& ctx) {
-                    ctx.r14 = 0;    // Force 1280x720 on any resolution change
-                });
         }
-        else if (!ResolutionList1ScanResult || !ResolutionList2ScanResult || !ResolutionIndexScanResult) {
+        else if (!ResolutionList1ScanResult || !ResolutionList2ScanResult) {
             spdlog::error("Custom Resolution: Pattern scan(s) failed.");
         }
 
         // Spoof GetSystemMetrics results so our custom resolution is always valid
-        uint8_t* SystemMetricsScanResult = Memory::PatternScan(baseModule, "89 ?? ?? ?? ?? ?? FF ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 48 ?? ?? ?? 89 ?? ?? 89 ?? ??");
+        uint8_t* SystemMetricsScanResult = Memory::PatternScan(baseModule, "89 ?? ?? ?? ?? ?? FF ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? ?? ?? ?? 48 89 ?? ?? 89 ?? ??");
+        uint8_t* ResCheckScanResult = Memory::PatternScan(baseModule, "74 ?? 3B ?? ?? 77 ?? 3B ?? 0F ?? ?? ?? ?? ?? FF ?? 48 ?? ?? ??");
         if (SystemMetricsScanResult) {
             spdlog::info("Custom Resolution: GetSystemMetrics: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)SystemMetricsScanResult - (uintptr_t)baseModule);
             static SafetyHookMid ReportedWidthMidHook{};
             ReportedWidthMidHook = safetyhook::create_mid(SystemMetricsScanResult,
                 [](SafetyHookContext& ctx) {
-                    ctx.rax = iCurrentResX;
+                    ctx.rax = iCustomResX;
                 });
 
             static SafetyHookMid ReportedHeightMidHook{};
@@ -292,6 +306,11 @@ void Resolution()
                 [](SafetyHookContext& ctx) {
                     ctx.rax = iCustomResY;
                 });
+
+            // Allow internal resolution that is higher than the output
+            spdlog::info("Custom Resolution: GetSystemMetrics: ResCheck: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResCheckScanResult - (uintptr_t)baseModule);
+            Memory::PatchBytes((uintptr_t)ResCheckScanResult, "\x75", 1);
+            spdlog::info("Custom Resolution: GetSystemMetrics: ResCheck: Patched instruction.");
         }
         else if (!SystemMetricsScanResult ) {
             spdlog::error("Custom Resolution: GetSystemMetrics: Pattern scan failed.");
@@ -336,6 +355,21 @@ void HUD()
         }
         else if (!HUDSizeScanResult) {
             spdlog::error("HUD: Size: Pattern scan failed.");
+        }
+
+        // Key Guide
+        uint8_t* KeyGuideScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? E8 ?? ?? ?? ??");
+        if (KeyGuideScanResult) {
+            spdlog::info("HUD: Key Guide: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuideScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid KeyGuideMidHook{};
+            KeyGuideMidHook = safetyhook::create_mid(KeyGuideScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm4.f32[0] = fHUDWidth;
+                });
+        }
+        else if (!KeyGuideScanResult) {
+            spdlog::error("HUD: Key Guide: Pattern scan failed.");
         }
     }   
 }
