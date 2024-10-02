@@ -321,15 +321,55 @@ void Resolution()
 void AspectFOV()
 {
     if (bFixAspect) {
-        
+        // Markers + Enemy Culling Aspect Ratio
+        uint8_t* CullingMarkersAspectScanResult = Memory::PatternScan(baseModule, "8B ?? ?? ?? ?? ?? 48 ?? ?? 89 ?? ?? ?? ?? ?? 66 ?? ?? ?? ?? ?? ?? 00 01");
+        if (CullingMarkersAspectScanResult) {
+            spdlog::info("Aspect Ratio: Markers/Culling: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CullingMarkersAspectScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid CullingMarkersAspectMidHook{};
+            CullingMarkersAspectMidHook = safetyhook::create_mid(CullingMarkersAspectScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (ctx.rcx + 0x1B0) {
+                        if (fAspectRatio > fNativeAspect)
+                            *reinterpret_cast<float*>(ctx.rcx + 0x1B0) = fAspectRatio;
+                    }
+                });
+        }
+        else if (!CullingMarkersAspectScanResult) {
+            spdlog::error("Aspect Ratio: Markers/Culling: Pattern scan failed.");
+        }
     }
 
     if (bFixFOV) {
-       
+        // Global FOV
+        uint8_t* GlobalFOVScanResult = Memory::PatternScan(baseModule, "D1 ?? A8 01 F3 0F ?? ?? ?? ?? 8B ?? ?? ?? ?? ?? 89 ?? ?? ?? 74 ??");
+        if (GlobalFOVScanResult) {
+            spdlog::info("FOV: Global: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GlobalFOVScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid GlobalFOVMidHook{};
+            GlobalFOVMidHook = safetyhook::create_mid(GlobalFOVScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm1.f32[0] = 2.00f * atanf(tanf(ctx.xmm1.f32[0] / 2.00f) * (fNativeAspect / fAspectRatio));
+                });
+        }
+        else if (!GlobalFOVScanResult) {
+            spdlog::error("FOV: Global: Pattern scan failed.");
+        }
     }
 
     if (fGameplayFOVMulti != 1.00f) {
-        
+        // Gameplay FOV
+        uint8_t* GameplayFOVScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? 78 ?? ?? ?? 0F ?? ?? F3 0F ?? ?? E8 ?? ?? ?? ?? 85 ?? 75 ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
+        if (GameplayFOVScanResult) {
+            spdlog::info("FOV: Gameplay: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayFOVScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid GameplayFOVMidHook{};
+            GameplayFOVMidHook = safetyhook::create_mid(GameplayFOVScanResult + 0x8,
+                [](SafetyHookContext& ctx) {
+                    ctx.xmm4.f32[0] *= fGameplayFOVMulti;
+                });
+        }
+        else if (!GameplayFOVScanResult) {
+            spdlog::error("FOV: Gameplay: Pattern scan failed.");
+        }
     }
 }
 
@@ -357,19 +397,28 @@ void HUD()
             spdlog::error("HUD: Size: Pattern scan failed.");
         }
 
-        // Key Guide
-        uint8_t* KeyGuideScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? E8 ?? ?? ?? ??");
-        if (KeyGuideScanResult) {
-            spdlog::info("HUD: Key Guide: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuideScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid KeyGuideMidHook{};
-            KeyGuideMidHook = safetyhook::create_mid(KeyGuideScanResult,
+        // Key Guides
+        uint8_t* KeyGuide1ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? E8 ?? ?? ?? ??");
+        uint8_t* KeyGuide2ScanResult = Memory::PatternScan(baseModule, "0F ?? ?? 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ??");
+        if (KeyGuide1ScanResult && KeyGuide2ScanResult) {
+            spdlog::info("HUD: Key Guide: 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide1ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid KeyGuide1MidHook{};
+            KeyGuide1MidHook = safetyhook::create_mid(KeyGuide1ScanResult,
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
-                        ctx.xmm4.f32[0] = fHUDWidth;
+                        ctx.xmm4.f32[0] = fHUDWidth;  
+                });
+
+            spdlog::info("HUD: Key Guide: 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide2ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid KeyGuide2MidHook{};
+            KeyGuide2MidHook = safetyhook::create_mid(KeyGuide2ScanResult + 0x6,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm4.f32[0] = fHUDWidth;                    
                 });
         }
-        else if (!KeyGuideScanResult) {
-            spdlog::error("HUD: Key Guide: Pattern scan failed.");
+        else if (!KeyGuide1ScanResult || !KeyGuide2ScanResult) {
+            spdlog::error("HUD: Key Guide: Pattern scan(s) failed.");
         }
 
         // Menu Selections
@@ -390,7 +439,7 @@ void HUD()
         // Minimap Icons
         uint8_t* MinimapIconsScanResult = Memory::PatternScan(baseModule, "F3 41 ?? ?? ?? ?? F3 41 ?? ?? ?? ?? F3 44 ?? ?? ?? F3 44 ?? ?? ?? 0F ?? ?? ?? 0F 83 ?? ?? ?? ??");
         if (MinimapIconsScanResult) {
-            spdlog::info("HUD:  Minimap Icons: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MinimapIconsScanResult - (uintptr_t)baseModule);
+            spdlog::info("HUD: Minimap Icons: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MinimapIconsScanResult - (uintptr_t)baseModule);
             static SafetyHookMid MinimapIconsMidHook{};
             MinimapIconsMidHook = safetyhook::create_mid(MinimapIconsScanResult,
                 [](SafetyHookContext& ctx) {
@@ -411,7 +460,7 @@ void HUD()
         // Gameplay HUD
         uint8_t* GameplayHUDScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? 66 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ??");
         if (GameplayHUDScanResult) {
-            spdlog::info("HUD:  Gameplay HUD: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayHUDScanResult - (uintptr_t)baseModule);
+            spdlog::info("HUD: Gameplay HUD: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayHUDScanResult - (uintptr_t)baseModule);
             static SafetyHookMid GameplayHUDWidthMidHook{};
             GameplayHUDWidthMidHook = safetyhook::create_mid(GameplayHUDScanResult,
                 [](SafetyHookContext& ctx) {
@@ -450,6 +499,30 @@ void Framerate()
     }
 }
 
+void Misc()
+{
+    if (iShadowResolution != 0)
+    {
+        // Shadow Quality
+        // Changes "high" quality shadow resolution
+        uint8_t* ShadowQuality1ScanResult = Memory::PatternScan(baseModule, "00 10 00 00 00 10 00 00 4E 00 00 00 00 04 00 00");
+        uint8_t* ShadowQuality2ScanResult = Memory::PatternScan(baseModule, "BA 00 10 00 00 44 ?? ?? EB ?? BA 00 08 00 00");
+        if (ShadowQuality1ScanResult && ShadowQuality2ScanResult)
+        {
+            spdlog::info("Shadow Quality: Address 1 is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ShadowQuality1ScanResult - (uintptr_t)baseModule);
+            spdlog::info("Shadow Quality: Address 2 is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ShadowQuality2ScanResult - (uintptr_t)baseModule);
+
+            Memory::Write((uintptr_t)ShadowQuality1ScanResult, iShadowResolution);
+            Memory::Write((uintptr_t)ShadowQuality1ScanResult + 0x4, iShadowResolution);
+            Memory::Write((uintptr_t)ShadowQuality2ScanResult + 0x1, iShadowResolution);
+        }
+        else if (!ShadowQuality1ScanResult || !ShadowQuality2ScanResult)
+        {
+            spdlog::error("Shadow Quality: Pattern scan failed.");
+        }
+    }
+}
+
 DWORD __stdcall Main(void*)
 {
     Logging();
@@ -458,6 +531,7 @@ DWORD __stdcall Main(void*)
     AspectFOV();
     HUD();
     Framerate();
+    Misc();
     return true;
 }
 
