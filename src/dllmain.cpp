@@ -400,7 +400,8 @@ void HUD()
         // Key Guides
         uint8_t* KeyGuide1ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? E8 ?? ?? ?? ??");
         uint8_t* KeyGuide2ScanResult = Memory::PatternScan(baseModule, "0F ?? ?? 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ??");
-        if (KeyGuide1ScanResult && KeyGuide2ScanResult) {
+        uint8_t* KeyGuide3ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? 48 8B ?? ?? ??");
+        if (KeyGuide1ScanResult && KeyGuide2ScanResult && KeyGuide3ScanResult) {
             spdlog::info("HUD: Key Guide: 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide1ScanResult - (uintptr_t)baseModule);
             static SafetyHookMid KeyGuide1MidHook{};
             KeyGuide1MidHook = safetyhook::create_mid(KeyGuide1ScanResult,
@@ -416,8 +417,16 @@ void HUD()
                     if (fAspectRatio > fNativeAspect)
                         ctx.xmm4.f32[0] = fHUDWidth;                    
                 });
+
+            spdlog::info("HUD: Key Guide: 3: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide3ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid KeyGuide3MidHook{};
+            KeyGuide3MidHook = safetyhook::create_mid(KeyGuide3ScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm4.f32[0] = fHUDWidth;
+                });
         }
-        else if (!KeyGuide1ScanResult || !KeyGuide2ScanResult) {
+        else if (!KeyGuide1ScanResult || !KeyGuide2ScanResult || !KeyGuide3ScanResult) {
             spdlog::error("HUD: Key Guide: Pattern scan(s) failed.");
         }
 
@@ -498,12 +507,14 @@ void HUD()
                             }
                         }
 
-                        if (*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)std::round(fHUDWidth) && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)iCurrentResY) {
+                        // Fix screen captures
+                        if ((*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)std::round(fHUDWidth) && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)iCurrentResY) ||
+                            (*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)iCurrentResX && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)std::round(fHUDHeight))) {
                             if (fAspectRatio > fNativeAspect) {
-                                //*reinterpret_cast<short*>(ctx.rax + 0xF0) = (short)iCurrentResX; // Set new width
+                                *reinterpret_cast<short*>(ctx.rax + 0xF0) = (short)iCurrentResX; // Set new width
                             }
                             else if (fAspectRatio < fNativeAspect) {
-                                //*reinterpret_cast<short*>(ctx.rax + 0xF2) = static_cast<int>(2689 / fAspectRatio); // Set new height
+                                *reinterpret_cast<short*>(ctx.rax + 0xF2) = (short)iCurrentResY; // Set new height
                             }
                         }
                    }
@@ -513,25 +524,20 @@ void HUD()
             spdlog::error("HUD: Fades: Pattern scan failed.");
         }
 
-        // Gallery /*
-       /* uint8_t* GalleryScanResult = Memory::PatternScan(baseModule, "66 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? 0F 28 ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
+        // Gallery
+        uint8_t* GalleryScanResult = Memory::PatternScan(baseModule, "66 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? 0F 28 ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
         if (GalleryScanResult) {
             spdlog::info("HUD: Gallery: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GalleryScanResult - (uintptr_t)baseModule);
             static SafetyHookMid GalleryMidHook{};
-            GalleryMidHook = safetyhook::create_mid(GalleryScanResult + 0xB,
+            GalleryMidHook = safetyhook::create_mid(GalleryScanResult + 0x1A,
                 [](SafetyHookContext& ctx) {
-                    if (fAspectRatio > fNativeAspect) {
-                        ctx.xmm2.f32[0] = fHUDWidth;
-                    }
-                    else if (fAspectRatio < fNativeAspect) {
-                        ctx.xmm0.f32[0] = fHUDHeight;
-                    }
+                    if (ctx.r15 == 4)
+                        ctx.xmm2.f32[0] = fNativeAspect;
                 });
         }
         else if (!GalleryScanResult) {
             spdlog::error("HUD: Gallery: Pattern scan failed.");
         }
-        */
 
         // Render Textures
         uint8_t* RenderTextures1ScanResult = Memory::PatternScan(baseModule, "45 ?? ?? 44 ?? ?? ?? 41 0F ?? ?? 45 ?? ?? 75 ?? 44 ?? ?? ?? ?? ?? ?? EB ??");
@@ -543,7 +549,7 @@ void HUD()
             RenderTextures1MidHook = safetyhook::create_mid(RenderTextures1ScanResult,
                 [](SafetyHookContext& ctx) {
                     if ((int)ctx.r10 == 1920 && (int)ctx.r11 == 1080) {
-                        ctx.r10 = static_cast<int>((float)iCurrentResY * fNativeAspect);
+                        ctx.r10 = iCurrentResX;
                         ctx.r11 = iCurrentResY;
                     }
                 });
@@ -553,8 +559,8 @@ void HUD()
             RenderTextures2MidHook = safetyhook::create_mid(RenderTextures2ScanResult,
                 [](SafetyHookContext& ctx) {
                     if ((int)ctx.r13 == 1920 && ctx.r12 == 1080) {
-                        ctx.r13 = static_cast<int>((float)iCurrentResY * fNativeAspect);
-                        ctx.rdx = static_cast<int>((float)iCurrentResY * fNativeAspect);
+                        ctx.r13 = iCurrentResX;
+                        ctx.rdx = iCurrentResX;
                         ctx.r12 = iCurrentResY;
                     }
                 });
