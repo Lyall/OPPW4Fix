@@ -1,5 +1,5 @@
 # One Piece: Pirate Warriors 4 Fix
-[](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9) <br />
+[![Patreon-Button](https://github.com/user-attachments/assets/9cb844b7-5c8a-41d6-8b3d-80a349e2d261)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9) <br />
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/OPPW4Fix/total.svg)](https://github.com/Lyall/OPPW4Fix/releases)
 
 This is a fix for One Piece: Pirate Warriors 4 that adds ultrawide/narrower support, unlocked framerate and much more.
@@ -8,10 +8,10 @@ This is a fix for One Piece: Pirate Warriors 4 that adds ultrawide/narrower supp
 
 ### General
 - Custom resolution support.
-- Borderless mode.
 - Adjust gameplay FOV.
+- Adjust framerate cap. (Experimental)
 - Adjust shadow resolution.
-- Remove Windows 7 compatibility nag message.
+- Increased (native) render texture resolution.
 
 ### Ultrawide/narrower
 - Support for any aspect ratio.
