@@ -376,6 +376,10 @@ void AspectFOV()
 void HUD()
 {
     if (bFixHUD) {
+        // TODO: HUD
+        // Check it all at <16:9
+        // Fix capture BG breaks movies.
+
         // HUD Size
         uint8_t* HUDSizeScanResult = Memory::PatternScan(baseModule, "45 ?? ?? 75 ?? 0F 28 ?? ?? ?? ?? ?? 0F ?? ?? F2 0F ?? ?? ?? ?? ?? ?? 33 ??");
         if (HUDSizeScanResult) {
@@ -395,6 +399,28 @@ void HUD()
         }
         else if (!HUDSizeScanResult) {
             spdlog::error("HUD: Size: Pattern scan failed.");
+        }
+
+        // Minimap Position
+        uint8_t* MinimapPositionScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? 0F ?? ?? 76 ?? F3 0F ?? ?? EB ?? F3 0F ?? ?? f3 0F ?? ?? 89 ?? ?? ?? 45 ?? ??");
+        if (MinimapPositionScanResult) {
+            spdlog::info("HUD: Minimap Position: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MinimapPositionScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MinimapPositionWidthMidHook{};
+            MinimapPositionWidthMidHook = safetyhook::create_mid(MinimapPositionScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] = 1080.00f * fAspectRatio;
+                });
+
+            static SafetyHookMid MinimapPositionHeightMidHook{};
+            MinimapPositionHeightMidHook = safetyhook::create_mid(MinimapPositionScanResult + 0x2C,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] = 1920.00f / fAspectRatio;
+                });
+        }
+        else if (!MinimapPositionScanResult) {
+            spdlog::error("HUD: Minimap Position: Pattern scan failed.");
         }
 
         // Key Guides
