@@ -35,7 +35,7 @@ This list will contain bugs which may or may not be fixed.
 
 
 ## Screenshots
-| ![ezgif-4-b1e615184d](https://github.com/user-attachments/assets/c67edc29-8c9f-4254-a378-db2062074c5b) |
+| ![ezgif-6-a0826394f9](https://github.com/user-attachments/assets/fcee6463-9927-47c8-a3c2-9287de1564d7) |
 |:--:|
 | Gameplay |
 
