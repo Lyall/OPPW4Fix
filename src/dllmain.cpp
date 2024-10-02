@@ -478,6 +478,40 @@ void HUD()
         else if (!GameplayHUDScanResult) {
             spdlog::error("HUD: Gameplay HUD: Pattern scan failed.");
         }
+
+        // Fades
+        uint8_t* FadesScanResult = Memory::PatternScan(baseModule, "8B ?? ?? ?? ?? 00 89 ?? ?? 49 ?? ?? ?? 48 ?? ?? FF ?? ?? ?? ?? 00");
+        if (FadesScanResult) {
+            spdlog::info("HUD: Fades: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)FadesScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid FadesMidHook{};
+            FadesMidHook = safetyhook::create_mid(FadesScanResult,
+                [](SafetyHookContext& ctx)
+                {
+                    if (ctx.rax + 0xF0) {
+                        // Check for fade to black (2689x1793)
+                        if (*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)2689 && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)1793) {
+                            if (fAspectRatio > fNativeAspect) {
+                                *reinterpret_cast<short*>(ctx.rax + 0xF0) = static_cast<int>(1793 * fAspectRatio); // Set new width
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                *reinterpret_cast<short*>(ctx.rax + 0xF2) = static_cast<int>(2689 / fAspectRatio); // Set new height
+                            }
+                        }
+
+                        if (*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)std::round(fHUDWidth) && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)iCurrentResY) {
+                            if (fAspectRatio > fNativeAspect) {
+                                //*reinterpret_cast<short*>(ctx.rax + 0xF0) = (short)iCurrentResX; // Set new width
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                //*reinterpret_cast<short*>(ctx.rax + 0xF2) = static_cast<int>(2689 / fAspectRatio); // Set new height
+                            }
+                        }
+                   }
+                });
+        }
+        else if (!FadesScanResult) {
+            spdlog::error("HUD: Fades: Pattern scan failed.");
+        }
     }   
 }
 
