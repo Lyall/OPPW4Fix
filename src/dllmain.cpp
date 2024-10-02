@@ -381,7 +381,7 @@ void HUD()
 {
     if (bFixHUD) {
         // TODO: HUD
-        // Check it all at <16:9
+        // Check all HUD fixes at <16:9
         // Fix capture BG breaks movies.
 
         // HUD Size
@@ -552,21 +552,6 @@ void HUD()
         }
         else if (!FadesScanResult) {
             spdlog::error("HUD: Fades: Pattern scan failed.");
-        }
-
-        // Gallery
-        uint8_t* GalleryScanResult = Memory::PatternScan(baseModule, "66 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? 0F 28 ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
-        if (GalleryScanResult) {
-            spdlog::info("HUD: Gallery: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GalleryScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid GalleryMidHook{};
-            GalleryMidHook = safetyhook::create_mid(GalleryScanResult + 0x1A,
-                [](SafetyHookContext& ctx) {
-                    if (ctx.r15 == 4)
-                        ctx.xmm2.f32[0] = fNativeAspect;
-                });
-        }
-        else if (!GalleryScanResult) {
-            spdlog::error("HUD: Gallery: Pattern scan failed.");
         }
     }   
 }
