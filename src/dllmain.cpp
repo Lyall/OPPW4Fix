@@ -309,7 +309,7 @@ void Resolution()
         // Spoof GetSystemMetrics results so our custom resolution is always valid
         uint8_t* SystemMetricsScanResult = Memory::PatternScan(baseModule, "89 ?? ?? ?? ?? ?? FF ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? ?? ?? ?? 48 89 ?? ?? 89 ?? ??");
         uint8_t* ResCheckScanResult = Memory::PatternScan(baseModule, "74 ?? 3B ?? ?? 77 ?? 3B ?? 0F ?? ?? ?? ?? ?? FF ?? 48 ?? ?? ??");
-        if (SystemMetricsScanResult) {
+        if (SystemMetricsScanResult && ResCheckScanResult) {
             spdlog::info("Custom Resolution: GetSystemMetrics: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)SystemMetricsScanResult - (uintptr_t)baseModule);
             static SafetyHookMid ReportedWidthMidHook{};
             ReportedWidthMidHook = safetyhook::create_mid(SystemMetricsScanResult,
@@ -325,10 +325,10 @@ void Resolution()
 
             // Allow internal resolution that is higher than the output
             spdlog::info("Custom Resolution: GetSystemMetrics: ResCheck: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResCheckScanResult - (uintptr_t)baseModule);
-            Memory::PatchBytes((uintptr_t)ResCheckScanResult, "\x75", 1);
+            Memory::PatchBytes((uintptr_t)ResCheckScanResult, "\xE9\x89\x00\x00\x00", 5);
             spdlog::info("Custom Resolution: GetSystemMetrics: ResCheck: Patched instruction.");
         }
-        else if (!SystemMetricsScanResult ) {
+        else if (!SystemMetricsScanResult || !ResCheckScanResult) {
             spdlog::error("Custom Resolution: GetSystemMetrics: Pattern scan(s) failed.");
         }
     }
