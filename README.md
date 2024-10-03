@@ -8,6 +8,7 @@ This is a fix for One Piece: Pirate Warriors 4 that adds ultrawide/narrower supp
 
 ### General
 - Custom resolution support.
+- Intro logo skip.
 - Adjust gameplay FOV.
 - Adjust framerate cap. (Experimental)
 - Adjust shadow resolution.
