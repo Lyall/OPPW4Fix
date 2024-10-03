@@ -11,7 +11,7 @@ HMODULE thisModule; // Fix DLL
 
 // Version
 std::string sFixName = "OPPW4Fix";
-std::string sFixVer = "0.0.2";
+std::string sFixVer = "0.0.3";
 std::string sLogFile = sFixName + ".log";
 
 // Logger
@@ -489,6 +489,30 @@ void HUD()
             spdlog::error("HUD: Key Guide: Pattern scan(s) failed.");
         }
 
+        // Button Height
+        uint8_t* ButtonHeight1ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 44 ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ??");
+        uint8_t* ButtonHeight2ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 44 ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? 44 ?? ?? ?? ?? ?? ??");  
+        if (ButtonHeight1ScanResult && ButtonHeight2ScanResult) {
+            spdlog::info("HUD: Button Height: 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ButtonHeight1ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid ButtonHeight1MidHook{};
+            ButtonHeight1MidHook = safetyhook::create_mid(ButtonHeight1ScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm2.f32[0] = fHUDHeight;
+                });
+
+            spdlog::info("HUD: Button Height: 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ButtonHeight2ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid ButtonHeight2MidHook{};
+            ButtonHeight2MidHook = safetyhook::create_mid(ButtonHeight2ScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm2.f32[0] = fHUDHeight;
+                });
+        }
+        else if (!ButtonHeight1ScanResult || !ButtonHeight2ScanResult) {
+            spdlog::error("HUD: Button Height: Pattern scan(s) failed.");
+        }
+
         // Menu Selections
         uint8_t* MenuSelectionsScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 83 ?? ?? 7C ?? F3 0F ?? ?? ?? ?? ?? ?? EB ??");
         if (MenuSelectionsScanResult) {
@@ -534,13 +558,6 @@ void HUD()
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
                         ctx.xmm1.f32[0] = fHUDWidth;
-                });
-
-            static SafetyHookMid GameplayHUDHeightMidHook{};
-            GameplayHUDHeightMidHook = safetyhook::create_mid(GameplayHUDScanResult + 0x1B,
-                [](SafetyHookContext& ctx) {
-                    if (fAspectRatio < fNativeAspect)
-                        ctx.xmm0.f32[0] = fHUDHeight;
                 });
         }
         else if (!GameplayHUDScanResult) {
