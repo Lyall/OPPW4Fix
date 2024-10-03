@@ -32,6 +32,7 @@ int iCustomResY = 720;
 bool bFixFOV;
 bool bFixAspect;
 bool bFixHUD;
+bool bSkipIntro;
 int iFramerateCap;
 float fGameplayFOVMulti;
 int iShadowResolution;
@@ -51,6 +52,7 @@ float fHUDHeightOffset;
 int iCurrentResX;
 int iCurrentResY;
 float fCurrentFrametime = 0.0166666f;
+bool bIsMoviePlaying = false;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -212,6 +214,9 @@ void Configuration()
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
     spdlog::info("Config Parse: bFixHUD: {}", bFixHUD);
 
+    inipp::get_value(ini.sections["Skip Intro"], "Enabled", bSkipIntro);
+    spdlog::info("Config Parse: bSkipIntro: {}", bSkipIntro);
+
     inipp::get_value(ini.sections["Gameplay FOV"], "Multiplier", fGameplayFOVMulti);
     if ((float)fGameplayFOVMulti < 0.10f || (float)fGameplayFOVMulti > 3.00f) {
         fGameplayFOVMulti = std::clamp((float)fGameplayFOVMulti, 0.10f, 3.00f);
@@ -275,9 +280,16 @@ void Resolution()
         spdlog::error("Current Resolution: Pattern scan failed.");
     }
 
+    // Add custom resolution
     if (bCustomRes) {
-        // Add custom resolution
-        uint8_t* ResolutionList1ScanResult = Memory::PatternScan(baseModule, "00 05 00 00 D0 02 00 00 56 05 00 00");
+        // These patterns will always be valid but may not be in memory yet. 
+        // So we'll attempt to scan for it for 30 seconds and give the game time to load it.
+        uint8_t* ResolutionList1ScanResult = nullptr;
+        for (int attempts = 0; attempts < 300; ++attempts) {
+            if (ResolutionList1ScanResult = Memory::PatternScan(baseModule, "00 05 00 00 D0 02 00 00 56 05 00 00"))
+                break; // Exit loop
+            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Sleep and check again
+        }
         uint8_t* ResolutionList2ScanResult = Memory::PatternScan(baseModule, "00 05 D0 02 56 05 00 03 40 06");
         if (ResolutionList1ScanResult && ResolutionList2ScanResult) {
             spdlog::info("Custom Resolution: List 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ResolutionList1ScanResult - (uintptr_t)baseModule);
@@ -288,7 +300,7 @@ void Resolution()
             Memory::Write((uintptr_t)ResolutionList1ScanResult + 0x4, iCustomResY);
             Memory::Write((uintptr_t)ResolutionList2ScanResult, (short)iCustomResX);
             Memory::Write((uintptr_t)ResolutionList2ScanResult + 0x2, (short)iCustomResY);
-            spdlog::info("Custom Resolution: List: Replaced {}x{} with {}x{}", 1280, 720, iCustomResX, iCustomResY);
+            spdlog::info("Custom Resolution: List: Replaced 1280x720 with {}x{}", iCustomResX, iCustomResY);
         }
         else if (!ResolutionList1ScanResult || !ResolutionList2ScanResult) {
             spdlog::error("Custom Resolution: Pattern scan(s) failed.");
@@ -317,9 +329,29 @@ void Resolution()
             spdlog::info("Custom Resolution: GetSystemMetrics: ResCheck: Patched instruction.");
         }
         else if (!SystemMetricsScanResult ) {
-            spdlog::error("Custom Resolution: GetSystemMetrics: Pattern scan failed.");
+            spdlog::error("Custom Resolution: GetSystemMetrics: Pattern scan(s) failed.");
         }
     }
+}
+
+void SkipIntro()
+{
+    if (bSkipIntro) {
+        // Opening State
+        uint8_t* OpeningStateScanResult = Memory::PatternScan(baseModule, "48 ?? ?? 83 ?? 0E 0F 87 ?? ?? ?? ?? 48 ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ??");
+        if (OpeningStateScanResult) {
+            spdlog::info("Intro Skip: Opening State: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)OpeningStateScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid OpeningStateMidHook{};
+            OpeningStateMidHook = safetyhook::create_mid(OpeningStateScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (ctx.rax == 0x04)
+                        ctx.rax = 0x0E;
+                });
+        }
+        else if (!OpeningStateScanResult) {
+            spdlog::error("Intro Skip: Opening State: Pattern scan failed.");
+        }
+    } 
 }
 
 void AspectFOV()
@@ -382,7 +414,6 @@ void HUD()
     if (bFixHUD) {
         // TODO: HUD
         // Check all HUD fixes at <16:9
-        // Fix capture BG breaks movies.
 
         // HUD Size
         uint8_t* HUDSizeScanResult = Memory::PatternScan(baseModule, "45 ?? ?? 75 ?? 0F 28 ?? ?? ?? ?? ?? 0F ?? ?? F2 0F ?? ?? ?? ?? ?? ?? 33 ??");
@@ -518,7 +549,27 @@ void HUD()
             spdlog::error("HUD: Gameplay HUD: Pattern scan failed.");
         }
 
-        // Fades
+        // Get movie state
+        uint8_t* MovieStateScanResult = Memory::PatternScan(baseModule, "4C ?? ?? 83 ?? 16 0F 87 ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ??");
+        if (MovieStateScanResult) {
+            spdlog::info("HUD: Movie State: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MovieStateScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MovieStateMidHook{};
+            MovieStateMidHook = safetyhook::create_mid(MovieStateScanResult,
+                [](SafetyHookContext& ctx) {
+                    // Is movie playing/paused
+                    if ((int)ctx.rax == 0x0B || (int)ctx.rax == 0x0C || (int)ctx.rax == 0x0D || (int)ctx.rax == 0x0F || (int)ctx.rax == 0x10) {
+                        bIsMoviePlaying = true;
+                    }
+                    else {
+                        bIsMoviePlaying = false;
+                    }
+                });
+        }
+        else if (!MovieStateScanResult) {
+            spdlog::error("HUD: Movie State: Pattern scan failed.");
+        }
+
+        // Fades + Movies
         uint8_t* FadesScanResult = Memory::PatternScan(baseModule, "8B ?? ?? ?? ?? 00 89 ?? ?? 49 ?? ?? ?? 48 ?? ?? FF ?? ?? ?? ?? 00");
         if (FadesScanResult) {
             spdlog::info("HUD: Fades: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)FadesScanResult - (uintptr_t)baseModule);
@@ -537,21 +588,55 @@ void HUD()
                             }
                         }
 
-                        // Fix screen captures
-                        if ((*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)std::round(fHUDWidth) && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)iCurrentResY) ||
-                            (*reinterpret_cast<short*>(ctx.rax + 0xF0) == (short)iCurrentResX && *reinterpret_cast<short*>(ctx.rax + 0xF2) == (short)std::round(fHUDHeight))) {
-                            if (fAspectRatio > fNativeAspect) {
-                                *reinterpret_cast<short*>(ctx.rax + 0xF0) = (short)iCurrentResX; // Set new width
+                        // Fix movies
+                        char* sElementName = (char*)ctx.rax + 0x280;
+                        if (strcmp(sElementName, "ktglkids_scl_capture_plane_full_rgba8") == 0) {     
+                            if (bIsMoviePlaying) {
+                                if (fAspectRatio > fNativeAspect) {
+                                    *reinterpret_cast<short*>(ctx.rax + 0xF0) = static_cast<short>(std::round(fHUDWidth));
+                                }
+                                else if (fAspectRatio < fNativeAspect) {
+                                    *reinterpret_cast<short*>(ctx.rax + 0xF2) = static_cast<short>(std::round(fHUDHeight));
+                                }
                             }
-                            else if (fAspectRatio < fNativeAspect) {
-                                *reinterpret_cast<short*>(ctx.rax + 0xF2) = (short)iCurrentResY; // Set new height
-                            }
+                            else if (!bIsMoviePlaying) {
+                                if (fAspectRatio > fNativeAspect) {
+                                    *reinterpret_cast<short*>(ctx.rax + 0xF0) = (short)iCurrentResX;
+                                }
+                                else if (fAspectRatio < fNativeAspect) {
+                                    *reinterpret_cast<short*>(ctx.rax + 0xF2) = (short)iCurrentResY;
+                                }
+                            }  
                         }
                    }
                 });
         }
         else if (!FadesScanResult) {
             spdlog::error("HUD: Fades: Pattern scan failed.");
+        }
+
+        // Screen size
+        uint8_t* ScreenSizeScanResult = Memory::PatternScan(baseModule, "41 ?? ?? ?? 80 ?? ?? ?? 00 41 ?? 01 00 00 00 F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ??");
+        if (ScreenSizeScanResult) {
+            spdlog::info("HUD: Screen Size: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ScreenSizeScanResult - (uintptr_t)baseModule);
+
+            static SafetyHookMid ScreenSizeMidHook{};
+            ScreenSizeMidHook = safetyhook::create_mid(ScreenSizeScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (ctx.r8 + 0x60) {
+                        if (*reinterpret_cast<short*>(ctx.r8 + 0x60) == (short)1920 && *reinterpret_cast<short*>(ctx.r8 + 0x62) == (short)1080) {
+                            if (fAspectRatio > fNativeAspect) {
+                                *reinterpret_cast<short*>(ctx.r8 + 0x60) = static_cast<short>(1080.00f * fAspectRatio);
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                *reinterpret_cast<short*>(ctx.r8 + 0x62) = static_cast<short>(1920.00f / fAspectRatio);
+                            }
+                        }   
+                    }                
+                });
+        }
+        else if (!ScreenSizeScanResult) {
+            spdlog::error("HUD: Screen Size: Pattern scan failed.");
         }
     }   
 }
@@ -634,6 +719,7 @@ DWORD __stdcall Main(void*)
 {
     Logging();
     Configuration();
+    SkipIntro();
     Resolution();
     AspectFOV();
     HUD();
@@ -652,9 +738,11 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     case DLL_PROCESS_ATTACH:
     {
         thisModule = hModule;
-        HANDLE mainHandle = CreateThread(NULL, 0, Main, 0, NULL, 0);
+        HANDLE mainHandle = CreateThread(NULL, 0, Main, 0, CREATE_SUSPENDED, 0);
         if (mainHandle)
         {
+            SetThreadPriority(mainHandle, THREAD_PRIORITY_TIME_CRITICAL);
+            ResumeThread(mainHandle);
             CloseHandle(mainHandle);
         }
         break;
