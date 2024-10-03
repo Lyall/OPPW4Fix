@@ -11,7 +11,7 @@ HMODULE thisModule; // Fix DLL
 
 // Version
 std::string sFixName = "OPPW4Fix";
-std::string sFixVer = "0.0.1";
+std::string sFixVer = "0.0.2";
 std::string sLogFile = sFixName + ".log";
 
 // Logger
@@ -365,7 +365,7 @@ void AspectFOV()
             CullingMarkersAspectMidHook = safetyhook::create_mid(CullingMarkersAspectScanResult,
                 [](SafetyHookContext& ctx) {
                     if (ctx.rcx + 0x1B0) {
-                        if (fAspectRatio > fNativeAspect)
+                        if (fAspectRatio != fNativeAspect)
                             *reinterpret_cast<float*>(ctx.rcx + 0x1B0) = fAspectRatio;
                     }
                 });
@@ -383,7 +383,8 @@ void AspectFOV()
             static SafetyHookMid GlobalFOVMidHook{};
             GlobalFOVMidHook = safetyhook::create_mid(GlobalFOVScanResult,
                 [](SafetyHookContext& ctx) {
-                    if (fAspectRatio < fNativeAspect)
+                    // Scale FOV. Don't scale HUD FOV though as it's hardcoded to 0.7853981853
+                    if (fAspectRatio < fNativeAspect && ctx.xmm1.f32[0] != 0.7853981853f)
                         ctx.xmm1.f32[0] = 2.00f * atanf(tanf(ctx.xmm1.f32[0] / 2.00f) * (fNativeAspect / fAspectRatio));
                 });
         }
@@ -412,9 +413,6 @@ void AspectFOV()
 void HUD()
 {
     if (bFixHUD) {
-        // TODO: HUD
-        // Check all HUD fixes at <16:9
-
         // HUD Size
         uint8_t* HUDSizeScanResult = Memory::PatternScan(baseModule, "45 ?? ?? 75 ?? 0F 28 ?? ?? ?? ?? ?? 0F ?? ?? F2 0F ?? ?? ?? ?? ?? ?? 33 ??");
         if (HUDSizeScanResult) {
