@@ -34,6 +34,8 @@ This is a fix for One Piece: Pirate Warriors 4 that adds ultrawide/narrower supp
 Please report any issues you see.
 This list will contain bugs which may or may not be fixed.
 
+- Shadows cull incorrectly at <16:9 when using "Fix FOV".
+
 ## Screenshots
 | ![ezgif-6-a0826394f9](https://github.com/user-attachments/assets/fcee6463-9927-47c8-a3c2-9287de1564d7) |
 |:--:|
