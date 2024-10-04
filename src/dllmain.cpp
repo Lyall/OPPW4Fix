@@ -558,6 +558,13 @@ void HUD()
                     if (fAspectRatio > fNativeAspect)
                         ctx.xmm1.f32[0] = fHUDWidth;
                 });
+
+            static SafetyHookMid GameplayHUDHeightMidHook{};
+            GameplayHUDHeightMidHook = safetyhook::create_mid(GameplayHUDScanResult + 0x17,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDHeight;
+                });
         }
         else if (!GameplayHUDScanResult) {
             spdlog::error("HUD: Gameplay HUD: Pattern scan failed.");
