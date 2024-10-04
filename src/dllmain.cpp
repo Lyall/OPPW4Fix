@@ -465,7 +465,7 @@ void HUD()
             KeyGuide1MidHook = safetyhook::create_mid(KeyGuide1ScanResult,
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
-                        ctx.xmm4.f32[0] = fHUDWidth;  
+                        ctx.xmm4.f32[0] = fHUDWidth;
                 });
 
             spdlog::info("HUD: Key Guide: 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide2ScanResult - (uintptr_t)baseModule);
@@ -473,7 +473,7 @@ void HUD()
             KeyGuide2MidHook = safetyhook::create_mid(KeyGuide2ScanResult + 0x6,
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
-                        ctx.xmm4.f32[0] = fHUDWidth;                    
+                        ctx.xmm4.f32[0] = fHUDWidth;
                 });
 
             spdlog::info("HUD: Key Guide: 3: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)KeyGuide3ScanResult - (uintptr_t)baseModule);
@@ -490,7 +490,7 @@ void HUD()
 
         // Button Height
         uint8_t* ButtonHeight1ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 44 ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ??");
-        uint8_t* ButtonHeight2ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 44 ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? 44 ?? ?? ?? ?? ?? ??");  
+        uint8_t* ButtonHeight2ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 44 ?? ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? 44 ?? ?? ?? ?? ?? ??");
         if (ButtonHeight1ScanResult && ButtonHeight2ScanResult) {
             spdlog::info("HUD: Button Height: 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ButtonHeight1ScanResult - (uintptr_t)baseModule);
             static SafetyHookMid ButtonHeight1MidHook{};
@@ -604,7 +604,7 @@ void HUD()
 
                         // Fix movies
                         char* sElementName = (char*)ctx.rax + 0x280;
-                        if (strcmp(sElementName, "ktglkids_scl_capture_plane_full_rgba8") == 0) {     
+                        if (strcmp(sElementName, "ktglkids_scl_capture_plane_full_rgba8") == 0) {
                             if (bIsMoviePlaying) {
                                 if (fAspectRatio > fNativeAspect) {
                                     *reinterpret_cast<short*>(ctx.rax + 0xF0) = static_cast<short>(std::round(fHUDWidth));
@@ -620,9 +620,9 @@ void HUD()
                                 else if (fAspectRatio < fNativeAspect) {
                                     *reinterpret_cast<short*>(ctx.rax + 0xF2) = (short)iCurrentResY;
                                 }
-                            }  
+                            }
                         }
-                   }
+                    }
                 });
         }
         else if (!FadesScanResult) {
@@ -645,14 +645,109 @@ void HUD()
                             else if (fAspectRatio < fNativeAspect) {
                                 *reinterpret_cast<short*>(ctx.r8 + 0x62) = static_cast<short>(1920.00f / fAspectRatio);
                             }
-                        }   
-                    }                
+                        }
+                    }
                 });
         }
         else if (!ScreenSizeScanResult) {
             spdlog::error("HUD: Screen Size: Pattern scan failed.");
         }
-    }   
+
+        // Growth Map
+        uint8_t* GrowthMapScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? 66 ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? 66 0F ?? ?? ?? ?? ?? ??");
+        if (GrowthMapScanResult) {
+            spdlog::info("HUD: Growth Map: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GrowthMapScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid GrowthMapWidthMidHook{};
+            GrowthMapWidthMidHook = safetyhook::create_mid(GrowthMapScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDWidth;
+                });
+
+            static SafetyHookMid GrowthMapHeightMidHook{};
+            GrowthMapHeightMidHook = safetyhook::create_mid(GrowthMapScanResult + 0x32,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDHeight;
+                });
+        }
+        else if (!GrowthMapScanResult) {
+            spdlog::error("HUD: Growth Map: Pattern scan failed.");
+        }
+
+        // Soul Map
+        uint8_t* SoulMapScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? 66 ?? ?? ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? 66 0F ?? ?? ?? ?? ?? ??");
+        if (SoulMapScanResult) {
+            spdlog::info("HUD: Soul Map: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)SoulMapScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid SoulMapWidthMidHook{};
+            SoulMapWidthMidHook = safetyhook::create_mid(SoulMapScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDWidth;
+                });
+
+            static SafetyHookMid SoulMapHeightMidHook{};
+            SoulMapHeightMidHook = safetyhook::create_mid(SoulMapScanResult + 0x32,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDHeight;
+                });
+        }
+        else if (!SoulMapScanResult) {
+            spdlog::error("HUD: Soul Map: Pattern scan failed.");
+        }
+
+        // Mission Select
+        uint8_t* MissionSelect1ScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? F3 41 ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? 0F 28 ?? ?? ??");
+        uint8_t* MissionSelect2ScanResult = Memory::PatternScan(baseModule, "0F ?? ?? F3 41 ?? ?? ?? 66 0F ?? ?? 41 0F ?? ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ??");
+        if (MissionSelect1ScanResult && MissionSelect2ScanResult) {
+            spdlog::info("HUD: Mission Select: 1: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MissionSelect1ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MissionSelect1SizeMidHook{};
+            MissionSelect1SizeMidHook = safetyhook::create_mid(MissionSelect1ScanResult,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] = fHUDWidth;
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm1.f32[0] = fHUDHeight;
+                });
+
+            static SafetyHookMid MissionSelect1OffsetMidHook{};
+            MissionSelect1OffsetMidHook = safetyhook::create_mid(MissionSelect1ScanResult - 0x1E,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] += ((1080.00f * fAspectRatio) - 1920.00f) / 2.00f;
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm1.f32[0] += ((1920.00f / fAspectRatio) - 1080.00f) / 2.00f;
+                });
+
+            spdlog::info("HUD: Mission Select: 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MissionSelect2ScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid MissionSelect2SizeMidHook{};
+            MissionSelect2SizeMidHook = safetyhook::create_mid(MissionSelect2ScanResult + 0x3,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm2.f32[0] = fHUDWidth;
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm3.f32[0] = fHUDHeight;
+                });
+
+            static SafetyHookMid MissionSelect2OffsetWidthMidHook{};
+            MissionSelect2OffsetWidthMidHook = safetyhook::create_mid(MissionSelect2ScanResult + 0x23,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] += ((1080.00f * fAspectRatio) - 1920.00f) / 2.00f;
+                });
+
+            static SafetyHookMid MissionSelect2OffsetHeightMidHook{};
+            MissionSelect2OffsetHeightMidHook = safetyhook::create_mid(MissionSelect2ScanResult + 0x14,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio < fNativeAspect)
+                        ctx.xmm0.f32[0] += ((1920.00f / fAspectRatio) - 1080.00f) / 2.00f;
+                });
+        }
+        else if (!MissionSelect1ScanResult || !MissionSelect2ScanResult) {
+            spdlog::error("HUD: Mission Select: Pattern scan(s) failed.");
+        }
+    }
 }
 
 void Framerate()
