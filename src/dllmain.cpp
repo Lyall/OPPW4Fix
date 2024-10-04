@@ -707,8 +707,6 @@ void HUD()
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
                         ctx.xmm0.f32[0] = fHUDWidth;
-                    if (fAspectRatio < fNativeAspect)
-                        ctx.xmm1.f32[0] = fHUDHeight;
                 });
 
             static SafetyHookMid MissionSelect1OffsetMidHook{};
@@ -716,8 +714,6 @@ void HUD()
                 [](SafetyHookContext& ctx) {
                     if (fAspectRatio > fNativeAspect)
                         ctx.xmm0.f32[0] += ((1080.00f * fAspectRatio) - 1920.00f) / 2.00f;
-                    if (fAspectRatio < fNativeAspect)
-                        ctx.xmm1.f32[0] += ((1920.00f / fAspectRatio) - 1080.00f) / 2.00f;
                 });
 
             spdlog::info("HUD: Mission Select: 2: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)MissionSelect2ScanResult - (uintptr_t)baseModule);
