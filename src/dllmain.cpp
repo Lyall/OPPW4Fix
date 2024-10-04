@@ -367,29 +367,11 @@ void AspectFOV()
                     if (ctx.rcx + 0x1B0) {
                         if (fAspectRatio != fNativeAspect)
                             *reinterpret_cast<float*>(ctx.rcx + 0x1B0) = fAspectRatio;
-                    }
+                    }                
                 });
         }
         else if (!CullingMarkersAspectScanResult) {
             spdlog::error("Aspect Ratio: Markers/Culling: Pattern scan failed.");
-        }
-    }
-
-    if (bFixFOV) {
-        // Global FOV
-        uint8_t* GlobalFOVScanResult = Memory::PatternScan(baseModule, "D1 ?? A8 01 F3 0F ?? ?? ?? ?? 8B ?? ?? ?? ?? ?? 89 ?? ?? ?? 74 ??");
-        if (GlobalFOVScanResult) {
-            spdlog::info("FOV: Global: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GlobalFOVScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid GlobalFOVMidHook{};
-            GlobalFOVMidHook = safetyhook::create_mid(GlobalFOVScanResult,
-                [](SafetyHookContext& ctx) {
-                    // Scale FOV. Don't scale HUD FOV though as it's hardcoded to 0.7853981853
-                    if (fAspectRatio < fNativeAspect && ctx.xmm1.f32[0] != 0.7853981853f)
-                        ctx.xmm1.f32[0] = 2.00f * atanf(tanf(ctx.xmm1.f32[0] / 2.00f) * (fNativeAspect / fAspectRatio));
-                });
-        }
-        else if (!GlobalFOVScanResult) {
-            spdlog::error("FOV: Global: Pattern scan failed.");
         }
     }
 
@@ -406,6 +388,23 @@ void AspectFOV()
         }
         else if (!GameplayFOVScanResult) {
             spdlog::error("FOV: Gameplay: Pattern scan failed.");
+        }
+    }
+
+    if (bFixFOV) {
+        // Cutscene FOV
+        uint8_t* CutsceneFOVScanResult = Memory::PatternScan(baseModule, "00 0F 84 ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? 0F ?? ?? ?? ?? 0F ?? ?? ?? ?? 0F ?? ??");
+        if (CutsceneFOVScanResult) {
+            spdlog::info("FOV: Cutscene: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneFOVScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid CutsceneFOVMidHook{};
+            CutsceneFOVMidHook = safetyhook::create_mid(CutsceneFOVScanResult + 0xF,
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect)
+                        ctx.xmm0.f32[0] = fNativeAspect;
+                });
+        }
+        else if (!CutsceneFOVScanResult) {
+            spdlog::error("FOV: Cutscene: Pattern scan failed.");
         }
     }
 }
